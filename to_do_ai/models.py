@@ -8,7 +8,7 @@ class UserProfileModel(models.Model):
         return self.user.username
 
 class TaskModel(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="User")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="User", null=True, blank=True)
     task = models.CharField(max_length=50, blank=False)
     description = models.CharField(max_length=250, blank=True)
     due_date = models.DateField(null=True, blank=True)

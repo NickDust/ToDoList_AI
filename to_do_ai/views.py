@@ -2,7 +2,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from .models import TaskModel
-from .serializers import TaskSerializer, AiTaskSerializer
+from .serializers import TaskSerializer, AiTaskSerializer, RegisterSerializer
 from django.shortcuts import get_object_or_404
 from openai import OpenAI
 import json
@@ -14,7 +14,7 @@ load_dotenv()
 class TaskView(APIView):
 
     def get(self, request):
-        data = TaskModel.objects.all()
+        data = TaskModel.objects.filter(user=request.user).order_by("-id")
         if not data:
             return Response({"Message": "You have no tasks!."})
         serializer = TaskSerializer(data, many=True)
@@ -36,7 +36,7 @@ class DetailTaskView(APIView):
             request=TaskSerializer
     )
     def patch(self, request, pk):
-        task = get_object_or_404(TaskModel, pk=pk)
+        task = get_object_or_404(TaskModel, pk=pk, user=request.user)
         
         serializer = TaskSerializer(task, data=request.data, partial=True)
         if serializer.is_valid():
@@ -45,7 +45,7 @@ class DetailTaskView(APIView):
         return Response(serializer._errors, status=status.HTTP_400_BAD_REQUEST)
     
     def delete(self, request, pk):
-        task = get_object_or_404(TaskModel, pk=pk)
+        task = get_object_or_404(TaskModel, pk=pk, user=request.user)
         task.delete()
         return Response({"message": "Task deleted."}, status=status.HTTP_204_NO_CONTENT)
     
@@ -60,7 +60,6 @@ class TaskAIView(APIView):
         if serializer.is_valid():
             text = serializer.validated_data["text"]
             base_url = "https://api.aimlapi.com/v1"
-            user = request.user.id
             api_key = os.getenv("AI_KEY") 
 
             system_prompt = """
@@ -107,11 +106,9 @@ class TaskAIView(APIView):
             print(response)
             try:
                 parsed_outp = json.loads(response)
-                print(parsed_outp)
                 task = parsed_outp.get("tasks", [])
                 for t in task:
-                    t["user"] = user
-                print(task)
+                    t["user"] = request.user.id
             except json.JSONDecodeError:
                 return Response({"Error": "Invalis JSON from AI", "raw" : response}, status=status.HTTP_400_BAD_REQUEST)
             
@@ -122,3 +119,13 @@ class TaskAIView(APIView):
             ser.is_valid(raise_exception=True)
             ser.save()
             return Response(ser.data, status=status.HTTP_201_CREATED)
+
+class RegisterView(APIView):
+
+    @extend_schema(request=RegisterSerializer)
+    def post(self, request):
+        serializer = RegisterSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            return Response({"message": "User created correctly."}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
